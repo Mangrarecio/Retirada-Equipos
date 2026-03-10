@@ -22,16 +22,13 @@ st.markdown("""
 def conectar_google_sheets():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        # Credenciales desde Streamlit Secrets
+        # Usa las credenciales de los Secrets de Streamlit
         credenciales = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
         cliente = gspread.authorize(credenciales)
-        # NOMBRE ACTUALIZADO: Debe coincidir con tu archivo en Google Drive
+        # NOMBRE ACTUALIZADO: Asegúrate que en Drive se llama exactamente así
         return cliente.open("Retirada Equipos").sheet1
-    except gspread.exceptions.SpreadsheetNotFound:
-        st.error("Error: No se encontró la hoja 'Retirada Equipos'. Revisa el nombre en tu Google Drive.")
-        return None
     except Exception as e:
-        st.error(f"Error de conexión: {e}")
+        st.error(f"Error de conexión con Google Sheets: {e}")
         return None
 
 def guardar_datos(tipo, fecha, enfermero_dni, equipo, lugar, celador_dni):
@@ -69,11 +66,11 @@ tab1, tab2 = st.tabs(["🔴 RETIRADA DE EQUIPO", "🟢 ENTREGA DE EQUIPO"])
 with tab1:
     with st.form("form_retirada", clear_on_submit=True):
         st.markdown("### Datos de la Retirada")
-        f_ret = st.date_input("Fecha de retirada", key="f_ret")
-        enf_ret = st.text_input("Nombre de enfermero y DNI", key="enf_ret")
-        eq_ret = st.text_input("Equipo que se retira", key="eq_ret")
-        lug_ret = st.text_input("Lugar de retirada", key="lug_ret")
-        cel_ret = st.text_input("Nombre de celador y DNI", key="cel_ret")
+        f_ret = st.date_input("Fecha de retirada", key="f_ret_input")
+        enf_ret = st.text_input("Nombre de enfermero y DNI", key="enf_ret_input")
+        eq_ret = st.text_input("Equipo que se retira", key="eq_ret_input")
+        lug_ret = st.text_input("Lugar de retirada", key="lug_ret_input")
+        cel_ret = st.text_input("Nombre de celador y DNI", key="cel_ret_input")
         
         if st.form_submit_button("Registrar Movimiento"):
             if all([enf_ret, eq_ret, lug_ret, cel_ret]):
@@ -86,11 +83,11 @@ with tab1:
 with tab2:
     with st.form("form_entrega", clear_on_submit=True):
         st.markdown("### Datos de la Entrega")
-        f_ent = st.date_input("Fecha de entrega", key="f_ent")
-        enf_ent = st.text_input("Nombre de enfermero y DNI", key="enf_ent")
-        eq_ent = st.text_input("Equipo que se entrega", key="eq_ent")
-        lug_ent = st.text_input("Lugar de entrega", key="lug_ent")
-        cel_ent = st.text_input("Nombre de celador y DNI", key="cel_ent")
+        f_ent = st.date_input("Fecha de entrega", key="f_ent_input")
+        enf_ent = st.text_input("Nombre de enfermero y DNI", key="enf_ent_input")
+        eq_ent = st.text_input("Equipo que se entrega", key="eq_ent_input")
+        lug_ent = st.text_input("Lugar de entrega", key="lug_ent_input")
+        cel_ent = st.text_input("Nombre de celador y DNI", key="cel_ent_input")
         
         if st.form_submit_button("Registrar Movimiento"):
             if all([enf_ent, eq_ent, lug_ent, cel_ent]):
