@@ -2,31 +2,34 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import datetime
+import re
 
-# --- INTERFAZ LIMPIA (SIN BARRA SUPERIOR) ---
+# --- CONFIGURACIÓN DE INTERFAZ TOTALMENTE LIMPIA ---
 st.set_page_config(page_title="Gestión Retirada De Equipos", layout="centered")
 
+# CSS para eliminar CUALQUIER rastro de los menús de Streamlit y el botón Deploy
 st.markdown("""
     <style>
-    /* Ocultar menús, barra superior y botones de Streamlit */
     header {visibility: hidden !important;}
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     .stAppDeployButton {display:none !important;}
+    [data-testid="stStatusWidget"] {display:none !important;}
+    div.block-container {padding-top: 2rem;}
     
-    /* Estilo para que el texto sea más legible */
+    /* Texto en negrita para mejor legibilidad */
     p, label, .stMarkdown, .stButton {
         font-weight: bold !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- CONEXIÓN DIRECTA ---
+# --- CONEXIÓN POR ID (MÉTODO INFALIBLE) ---
 def conectar_google_sheets():
     try:
         s = st.secrets["gcp_service_account"]
         
-        # Limpiamos la clave de posibles errores de formato
+        # Limpieza de la clave privada
         pk = s["private_key"].replace("\\n", "\n").strip()
         
         info_servicio = {
@@ -46,61 +49,67 @@ def conectar_google_sheets():
         credenciales = Credentials.from_service_account_info(info_servicio, scopes=scopes)
         cliente = gspread.authorize(credenciales)
         
-        # IMPORTANTE: Asegúrate de que el archivo se llame exactamente así en Drive
-        return cliente.open("Retirada Equipos").sheet1
+        # USAMOS EL ID QUE ME HAS PASADO (Es el código entre /d/ y /edit)
+        id_hoja = "1mcCAwKfy84oBQnpaJWGodR8KL8BQX-QQmiYA1Hdl3DM"
+        return cliente.open_by_key(id_hoja).sheet1
+        
     except Exception as e:
-        st.error(f"Error de acceso: Comprueba que el email del servicio tenga permiso de EDITOR.")
+        st.error(f"Error técnico de acceso: {e}")
         return None
 
-# --- LÓGICA DE LA APP ---
+# --- SISTEMA DE ENTRADA ---
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔐 Acceso")
-    pwd = st.text_input("Clave de seguridad", type="password")
-    if st.button("Entrar"):
+    st.title("Sistema de Gestión")
+    pwd = st.text_input("Introduzca Clave de Acceso", type="password")
+    if st.button("Acceder"):
         if pwd == "@1357#":
             st.session_state.auth = True
             st.rerun()
         else:
-            st.error("Clave incorrecta")
+            st.error("Clave Incorrecta")
     st.stop()
 
 # --- FORMULARIOS ---
-st.title("Gestión Retirada De Equipos")
-t1, t2 = st.tabs(["🔴 RETIRADA", "🟢 ENTREGA"])
+st.title("Gestión de Equipos")
+t1, t2 = st.tabs(["🔴 REGISTRAR RETIRADA", "🟢 REGISTRAR ENTREGA"])
 
-def guardar(datos):
+def guardar_registro(lista_datos):
     hoja = conectar_google_sheets()
     if hoja:
         try:
-            hoja.append_row(datos)
+            hoja.append_row(lista_datos)
             return True
         except Exception as e:
-            st.error(f"Error al escribir: {e}")
+            st.error(f"Error al escribir datos: {e}")
     return False
 
 with t1:
-    with st.form("ret", clear_on_submit=True):
-        f = st.date_input("Fecha")
-        en = st.text_input("Enfermero y DNI")
-        eq = st.text_input("Equipo")
-        lu = st.text_input("Lugar")
-        ce = st.text_input("Celador y DNI")
+    with st.form("form_ret", clear_on_submit=True):
+        f = st.date_input("Fecha de Retirada", value=datetime.date.today())
+        en = st.text_input("Nombre Enfermero / DNI")
+        eq = st.text_input("Identificación del Equipo")
+        lu = st.text_input("Lugar / Servicio")
+        ce = st.text_input("Nombre Celador / DNI")
         if st.form_submit_button("REGISTRAR RETIRADA"):
             if all([en, eq, lu, ce]):
-                if guardar(["RETIRADA", f.strftime("%d/%m/%Y"), en, eq, lu, ce]):
-                    st.success("✅ Registrado con éxito")
+                if guardar_registro(["RETIRADA", f.strftime("%d/%m/%Y"), en, eq, lu, ce]):
+                    st.success("✅ Registrado con éxito.")
+            else:
+                st.warning("Rellene todos los campos.")
 
 with t2:
-    with st.form("ent", clear_on_submit=True):
-        f2 = st.date_input("Fecha")
-        en2 = st.text_input("Enfermero y DNI")
-        eq2 = st.text_input("Equipo")
-        lu2 = st.text_input("Lugar")
-        ce2 = st.text_input("Celador y DNI")
+    with st.form("form_ent", clear_on_submit=True):
+        f2 = st.date_input("Fecha de Entrega", value=datetime.date.today())
+        en2 = st.text_input("Nombre Enfermero / DNI")
+        eq2 = st.text_input("Identificación del Equipo")
+        lu2 = st.text_input("Lugar / Servicio")
+        ce2 = st.text_input("Nombre Celador / DNI")
         if st.form_submit_button("REGISTRAR ENTREGA"):
             if all([en2, eq2, lu2, ce2]):
-                if guardar(["ENTREGA", f2.strftime("%d/%m/%Y"), en2, eq2, lu2, ce2]):
-                    st.success("✅ Registrado con éxito")
+                if guardar_registro(["ENTREGA", f2.strftime("%d/%m/%Y"), en2, eq2, lu2, ce2]):
+                    st.success("✅ Registrado con éxito.")
+            else:
+                st.warning("Rellene todos los campos.")
