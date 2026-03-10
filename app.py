@@ -2,6 +2,7 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import datetime
+import re
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Gestión Retirada De Equipos", layout="centered")
@@ -17,17 +18,27 @@ st.markdown("""
 # --- CONEXIÓN A GOOGLE SHEETS ---
 def conectar_google_sheets():
     try:
-        # Cargamos los secretos
         s = st.secrets["gcp_service_account"]
         
-        # LIMPIEZA DEFINITIVA: Quitamos saltos de línea literales y espacios
-        pk = s["private_key"].replace("\\n", "\n").strip()
+        # --- LIMPIEZA DE FUERZA BRUTA ---
+        # 1. Extraemos la clave
+        pk = s["private_key"]
+        
+        # 2. Quitamos cabeceras y pies para limpiar el contenido real
+        contenido = pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+        
+        # 3. Eliminamos TODO lo que no sea un carácter Base64 válido (letras, números, +, /, =)
+        # Esto elimina saltos de línea invisibles, espacios y caracteres basura como \x8d
+        contenido_limpio = re.sub(r'[^A-Za-z0-9+/=]', '', contenido)
+        
+        # 4. Reconstruimos la clave con el formato oficial
+        pk_final = f"-----BEGIN PRIVATE KEY-----\n{contenido_limpio}\n-----END PRIVATE KEY-----\n"
         
         info_servicio = {
             "type": s["type"],
             "project_id": s["project_id"],
             "private_key_id": s["private_key_id"],
-            "private_key": pk,
+            "private_key": pk_final,
             "client_email": s["client_email"],
             "client_id": s["client_id"],
             "auth_uri": s["auth_uri"],
@@ -40,11 +51,11 @@ def conectar_google_sheets():
         credenciales = Credentials.from_service_account_info(info_servicio, scopes=scopes)
         cliente = gspread.authorize(credenciales)
         
-        # Intenta abrir la hoja
+        # Asegúrate de que el nombre coincide con tu Drive
         return cliente.open("Retirada Equipos").sheet1
     
     except Exception as e:
-        st.error(f"Error detallado de conexión: {e}")
+        st.error(f"Error crítico de conexión: {e}")
         return None
 
 def guardar_datos(tipo, fecha, enf, eq, lug, cel):
@@ -58,7 +69,7 @@ def guardar_datos(tipo, fecha, enf, eq, lug, cel):
             st.error(f"Error al escribir: {e}")
     return False
 
-# --- ACCESO ---
+# --- SISTEMA DE ACCESO ---
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
@@ -70,10 +81,10 @@ if not st.session_state.auth:
             st.session_state.auth = True
             st.rerun()
         else:
-            st.error("Incorrecta")
+            st.error("Clave incorrecta")
     st.stop()
 
-# --- FORMULARIOS ---
+# --- INTERFAZ ---
 st.title("Gestión Retirada De Equipos")
 t1, t2 = st.tabs(["🔴 RETIRADA", "🟢 ENTREGA"])
 
@@ -84,10 +95,10 @@ with t1:
         eq = st.text_input("Equipo", key="eq1")
         lu = st.text_input("Lugar", key="l1")
         ce = st.text_input("Celador y DNI", key="c1")
-        if st.form_submit_button("Registrar Retirada"):
+        if st.form_submit_button("Registrar"):
             if all([en, eq, lu, ce]):
                 if guardar_datos("RETIRADA", f, en, eq, lu, ce):
-                    st.success("Registrado con éxito")
+                    st.success("Guardado en Google Drive")
 
 with t2:
     with st.form("f2", clear_on_submit=True):
@@ -96,7 +107,7 @@ with t2:
         eq2 = st.text_input("Equipo", key="eq2")
         lu2 = st.text_input("Lugar", key="l2")
         ce2 = st.text_input("Celador y DNI", key="c2")
-        if st.form_submit_button("Registrar Entrega"):
+        if st.form_submit_button("Registrar"):
             if all([en2, eq2, lu2, ce2]):
                 if guardar_datos("ENTREGA", f2, en2, eq2, lu2, ce2):
-                    st.success("Registrado con éxito")
+                    st.success("Guardado en Google Drive")
