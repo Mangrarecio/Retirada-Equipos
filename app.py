@@ -4,48 +4,38 @@ from google.oauth2.service_account import Credentials
 import datetime
 import re
 
-# --- CONFIGURACIÓN DE PÁGINA E INTERFAZ LIMPIA ---
+# --- CONFIGURACIÓN E INTERFAZ LIMPIA (SIN BOTÓN DE DEPLOY) ---
 st.set_page_config(page_title="Gestión Retirada De Equipos", layout="centered")
 
-# CSS para ocultar TODO: Barra superior, menú de la derecha (Deploy) y pie de página
 st.markdown("""
     <style>
-    /* Ocultar barra superior y botón de Deploy */
-    header {visibility: hidden !important;}
-    #MainMenu {visibility: hidden !important;}
-    footer {visibility: hidden !important;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    /* Ocultar botón de Deploy y barra superior */
     .stAppDeployButton {display:none !important;}
+    div[data-testid="stStatusWidget"] {visibility: hidden;}
     
-    /* Forzar negritas en los textos para mejor visibilidad */
+    /* Texto en negrita para mejor lectura */
     p, label, .stMarkdown, .stButton {
         font-weight: bold !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- CONEXIÓN SEGURA A GOOGLE SHEETS ---
 def conectar_google_sheets():
     try:
         s = st.secrets["gcp_service_account"]
         
-        # Limpieza de la clave privada para evitar errores de padding/formato
-        pk = s["private_key"]
-        # Extraer solo el contenido base64 y limpiar caracteres basura
-        contenido = pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
-        contenido_limpio = re.sub(r'[^A-Za-z0-9+/=]', '', contenido)
-        
-        # Corregir padding si faltan signos '='
-        faltan = len(contenido_limpio) % 4
-        if faltan:
-            contenido_limpio += '=' * (4 - faltan)
-            
-        pk_final = f"-----BEGIN PRIVATE KEY-----\n{contenido_limpio}\n-----END PRIVATE KEY-----\n"
+        # Limpieza de clave para asegurar conexión
+        pk = s["private_key"].replace("\\n", "\n")
+        pk = re.sub(r' +', ' ', pk) # Quita espacios dobles
         
         info_servicio = {
-            "type": s.get("type", "service_account"),
+            "type": s["type"],
             "project_id": s["project_id"],
             "private_key_id": s["private_key_id"],
-            "private_key": pk_final,
+            "private_key": pk,
             "client_email": s["client_email"],
             "client_id": s["client_id"],
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -58,67 +48,59 @@ def conectar_google_sheets():
         credenciales = Credentials.from_service_account_info(info_servicio, scopes=scopes)
         cliente = gspread.authorize(credenciales)
         
-        # Nombre de la hoja en Drive
+        # Debe ser el nombre exacto de tu archivo en Google Drive
         return cliente.open("Retirada Equipos").sheet1
     except Exception as e:
-        st.error(f"Error de conexión: Verifica que hayas compartido la hoja con el email de la cuenta de servicio.")
+        # Si llega aquí, es que falta el permiso en el Excel
+        st.error("Error: La hoja de cálculo no ha dado acceso a este usuario.")
+        st.info(f"Copia este email y dale permiso de EDITOR en tu Excel:\n\n{s['client_email']}")
         return None
 
-def guardar_datos(tipo, fecha, enf, eq, lug, cel):
-    hoja = conectar_google_sheets()
-    if hoja:
-        try:
-            fila = [tipo, fecha.strftime("%d/%m/%Y"), enf, eq, lug, cel]
-            hoja.append_row(fila)
-            return True
-        except Exception as e:
-            st.error(f"Error al escribir: {e}")
-    return False
-
-# --- CONTROL DE ACCESO ---
+# --- RESTO DEL CÓDIGO (Lógica de guardado y formularios) ---
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("Acceso al Sistema")
-    pwd = st.text_input("Introduce la clave", type="password")
+    st.title("Acceso")
+    pwd = st.text_input("Clave", type="password")
     if st.button("Entrar"):
         if pwd == "@1357#":
             st.session_state.auth = True
             st.rerun()
         else:
-            st.error("Clave incorrecta")
+            st.error("Incorrecta")
     st.stop()
 
-# --- APLICACIÓN PRINCIPAL ---
 st.title("Gestión Retirada De Equipos")
+t1, t2 = st.tabs(["🔴 RETIRADA", "🟢 ENTREGA"])
 
-t1, t2 = st.tabs(["🔴 RETIRADA DE EQUIPO", "🟢 ENTREGA DE EQUIPO"])
+def guardar_datos(datos):
+    hoja = conectar_google_sheets()
+    if hoja:
+        hoja.append_row(datos)
+        return True
+    return False
 
 with t1:
-    with st.form("form_ret", clear_on_submit=True):
-        f = st.date_input("Fecha de retirada")
+    with st.form("f1", clear_on_submit=True):
+        f = st.date_input("Fecha")
         en = st.text_input("Enfermero y DNI")
         eq = st.text_input("Equipo")
         lu = st.text_input("Lugar")
         ce = st.text_input("Celador y DNI")
-        if st.form_submit_button("Registrar Movimiento"):
+        if st.form_submit_button("Registrar"):
             if all([en, eq, lu, ce]):
-                if guardar_datos("RETIRADA", f, en, eq, lu, ce):
-                    st.success("✅ Datos guardados en Google Drive")
-            else:
-                st.warning("Completa todos los campos")
+                if guardar_datos(["RETIRADA", f.strftime("%d/%m/%Y"), en, eq, lu, ce]):
+                    st.success("Guardado")
 
 with t2:
-    with st.form("form_ent", clear_on_submit=True):
-        f2 = st.date_input("Fecha de entrega")
+    with st.form("f2", clear_on_submit=True):
+        f2 = st.date_input("Fecha")
         en2 = st.text_input("Enfermero y DNI")
         eq2 = st.text_input("Equipo")
         lu2 = st.text_input("Lugar")
         ce2 = st.text_input("Celador y DNI")
-        if st.form_submit_button("Registrar Movimiento"):
+        if st.form_submit_button("Registrar"):
             if all([en2, eq2, lu2, ce2]):
-                if guardar_datos("ENTREGA", f2, en2, eq2, lu2, ce2):
-                    st.success("✅ Datos guardados en Google Drive")
-            else:
-                st.warning("Completa todos los campos")
+                if guardar_datos(["ENTREGA", f2.strftime("%d/%m/%Y"), en2, eq2, lu2, ce2]):
+                    st.success("Guardado")
